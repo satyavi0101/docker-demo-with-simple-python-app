@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        terraform 'terraform'  // Must match the name you added in Jenkins UI
-    }
-
     environment {
         AWS_REGION = 'us-east-1'
         TF_IN_AUTOMATION = 'true'
@@ -19,24 +15,31 @@ pipeline {
 
         stage('Terraform Init & Apply') {
             steps {
-                sh 'terraform init'
-                sh 'terraform apply -auto-approve'
+                sh '''
+                    echo "🔧 Initializing Terraform"
+                    terraform --version
+                    terraform init
+                    terraform apply -auto-approve
+                '''
             }
         }
 
         stage('Output Deployment Info') {
             steps {
-                sh 'terraform output -json'
+                sh '''
+                    echo "📦 Deployment Output:"
+                    terraform output
+                '''
             }
         }
     }
 
     post {
         success {
-            echo '✅ Infrastructure provisioned and Docker image deployed via Terraform.'
+            echo '✅ Terraform provisioning completed successfully.'
         }
         failure {
-            echo '❌ Pipeline failed. Check logs for details.'
+            echo '❌ Terraform provisioning failed. Check the logs.'
         }
     }
 }
