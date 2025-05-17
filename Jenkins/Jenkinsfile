@@ -9,16 +9,22 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                echo '📥 Cloning repository...'
                 git branch: 'main', url: 'https://github.com/satyavi0101/docker-demo-with-simple-python-app.git'
             }
         }
 
         stage('Terraform Init & Apply') {
             steps {
+                echo '🔧 Initializing and applying Terraform...'
                 sh '''
-                    echo "🔧 Initializing Terraform"
+                    echo "👉 Checking Terraform version"
                     terraform --version
-                    terraform init
+
+                    echo "🚀 Running terraform init"
+                    terraform init -input=false
+
+                    echo "⚙️ Running terraform apply"
                     terraform apply -auto-approve
                 '''
             }
@@ -26,10 +32,8 @@ pipeline {
 
         stage('Output Deployment Info') {
             steps {
-                sh '''
-                    echo "📦 Deployment Output:"
-                    terraform output
-                '''
+                echo '📦 Fetching Terraform output...'
+                sh 'terraform output'
             }
         }
     }
@@ -39,7 +43,7 @@ pipeline {
             echo '✅ Terraform provisioning completed successfully.'
         }
         failure {
-            echo '❌ Terraform provisioning failed. Check the logs.'
+            echo '❌ Terraform provisioning failed. Please check the logs above for details.'
         }
     }
 }
