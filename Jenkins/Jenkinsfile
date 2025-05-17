@@ -1,49 +1,69 @@
 pipeline {
-    agent any
+  agent any
 
-    environment {
-        AWS_REGION = 'us-east-1'
-        TF_IN_AUTOMATION = 'true'
+  environment {
+    AWS_REGION = 'us-east-1'                     // change if needed
+    APP_NAME = 'my-web-app'                      // change if needed
+    DOCKER_SOURCE_REPO = 'https://github.com/satyavi0101/docker-demo-with-simple-python-app.git' // your app repo
+    AWS_CREDENTIALS_ID = 'aws-ecr-creds-id'     // Jenkins AWS Credentials ID
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        // Clone your application repo with Terraform inside 'infrastructure' folder
+        checkout scm
+      }
     }
 
-    stages {
-        stage('Checkout') {
-            steps {
-                echo '📥 Cloning repository...'
-                git branch: 'main', url: 'https://github.com/satyavi0101/docker-demo-with-simple-python-app.git'
-            }
+    stage('Terraform Init & Apply') {
+      steps {
+        dir('infrastructure') {
+          echo '👉 Checking Terraform version'
+          sh 'terraform --version'
+          echo '🚀 Running terraform init'
+          sh 'terraform init -input=false'
+          echo '⚙️ Running terraform apply'
+          sh 'terraform apply -auto-approve'
+          // Capture ECR repo URL output from Terraform
+          script {
+            env.ECR_REPO = sh(script: 'terraform output -raw ecr_repository_url', returnStdout: true).trim()
+            echo "ECR Repository URL: ${env.ECR_REPO}"
+          }
         }
-
-        stage('Terraform Init & Apply') {
-            steps {
-                echo '🔧 Initializing and applying Terraform...'
-                sh '''
-                    echo "👉 Checking Terraform version"
-                    terraform --version
-
-                    echo "🚀 Running terraform init"
-                    terraform init -input=false
-
-                    echo "⚙️ Running terraform apply"
-                    terraform apply -auto-approve
-                '''
-            }
-        }
-
-        stage('Output Deployment Info') {
-            steps {
-                echo '📦 Fetching Terraform output...'
-                sh 'terraform output'
-            }
-        }
+      }
     }
 
-    post {
-        success {
-            echo '✅ Terraform provisioning completed successfully.'
+    stage('Build and Push Docker Image') {
+      steps {
+        dir('') { // root dir with Dockerfile (adjust if needed)
+          script {
+            // Use Jenkins credentials and docker plugin to authenticate & push image
+            docker.withRegistry("https://${env.ECR_REPO}", env.AWS_CREDENTIALS_ID) {
+              def image = docker.build("${env.ECR_REPO}:latest")
+              image.push()
+            }
+          }
         }
-        failure {
-            echo '❌ Terraform provisioning failed. Please check the logs above for details.'
-        }
+      }
     }
+
+    stage('Deploy ECS Service') {
+      steps {
+        dir('infrastructure') {
+          echo '🔄 Re-applying Terraform to update ECS service'
+          sh 'terraform apply -auto-approve'
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Deployment completed successfully!"
+    }
+    failure {
+      echo "❌ Deployment failed. Check logs for details."
+    }
+  }
 }
