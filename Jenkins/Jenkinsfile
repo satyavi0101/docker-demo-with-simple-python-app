@@ -2,9 +2,8 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1' // Update if needed
-        IMAGE_NAME = 'your-image-name' // Replace with actual Docker image name
-        ECR_REPO = 'your-ecr-repo-url' // Replace with your ECR repo URL
+        AWS_REGION = 'us-east-1'
+        TF_IN_AUTOMATION = 'true'
     }
 
     stages {
@@ -16,42 +15,26 @@ pipeline {
 
         stage('Terraform Init & Apply') {
             steps {
-                dir('terraform') {
+                withEnv(["AWS_REGION=${env.AWS_REGION}"]) {
                     sh 'terraform init'
                     sh 'terraform apply -auto-approve'
                 }
             }
         }
 
-        stage('Build and Push Docker Image') {
+        stage('Output Deployment Info') {
             steps {
-                script {
-                    def commitHash = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    def imageTag = "${IMAGE_NAME}:${commitHash}"
-                    sh """
-                        docker build -t ${imageTag} .
-                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPO}
-                        docker tag ${imageTag} ${ECR_REPO}:${commitHash}
-                        docker push ${ECR_REPO}:${commitHash}
-                    """
-                }
-            }
-        }
-
-        stage('Deploy ECS Service') {
-            steps {
-                // Replace this with your actual ECS deployment commands
-                echo 'Deploying to ECS...'
+                sh 'terraform output -json'
             }
         }
     }
 
     post {
-        failure {
-            echo 'Build failed!'
-        }
         success {
-            echo 'Pipeline completed successfully.'
+            echo '✅ Infrastructure provisioned and Docker image deployed via Terraform.'
+        }
+        failure {
+            echo '❌ Pipeline failed. Check logs for details.'
         }
     }
 }
