@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        terraform 'terraform'  // Must match the name you added in Jenkins UI
+    }
+
     environment {
         AWS_REGION = 'us-east-1'
         TF_IN_AUTOMATION = 'true'
@@ -15,10 +19,8 @@ pipeline {
 
         stage('Terraform Init & Apply') {
             steps {
-                withEnv(["AWS_REGION=${env.AWS_REGION}"]) {
-                    sh 'terraform init'
-                    sh 'terraform apply -auto-approve'
-                }
+                sh 'terraform init'
+                sh 'terraform apply -auto-approve'
             }
         }
 
