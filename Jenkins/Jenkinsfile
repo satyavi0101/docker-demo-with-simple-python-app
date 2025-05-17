@@ -1,49 +1,57 @@
 pipeline {
-  agent any
-  environment {
-    AWS_REGION = 'us-east-1'
-    APP_NAME = 'my-web-app'
-  }
+    agent any
 
-  stages {
-    stage('Checkout') {
-      steps {
-        git url: 'https://github.com/satyavi0101/docker-demo-with-simple-python-app.git'
-      }
+    environment {
+        AWS_REGION = 'us-east-1' // Update if needed
+        IMAGE_NAME = 'your-image-name' // Replace with actual Docker image name
+        ECR_REPO = 'your-ecr-repo-url' // Replace with your ECR repo URL
     }
 
-    stage('Terraform Init & Apply') {
-      steps {
-        dir('infrastructure') {
-          sh 'terraform init'
-          sh 'terraform apply -auto-approve'
-          script {
-            env.ECR_REPO = sh(script: "terraform output -raw ecr_repository_url", returnStdout: true).trim()
-            echo "ECR Repo URL: ${env.ECR_REPO}"
-          }
-        }
-      }
-    }
-
-    stage('Build and Push Docker Image') {
-      steps {
-        dir('your-app-folder') {  // adjust this folder if needed
-          script {
-            docker.withRegistry("https://${env.ECR_REPO}", 'aws-ecr-creds-id') {
-              def image = docker.build("${env.ECR_REPO}:latest")
-              image.push()
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/satyavi0101/docker-demo-with-simple-python-app.git'
             }
-          }
         }
-      }
+
+        stage('Terraform Init & Apply') {
+            steps {
+                dir('terraform') {
+                    sh 'terraform init'
+                    sh 'terraform apply -auto-approve'
+                }
+            }
+        }
+
+        stage('Build and Push Docker Image') {
+            steps {
+                script {
+                    def commitHash = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    def imageTag = "${IMAGE_NAME}:${commitHash}"
+                    sh """
+                        docker build -t ${imageTag} .
+                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPO}
+                        docker tag ${imageTag} ${ECR_REPO}:${commitHash}
+                        docker push ${ECR_REPO}:${commitHash}
+                    """
+                }
+            }
+        }
+
+        stage('Deploy ECS Service') {
+            steps {
+                // Replace this with your actual ECS deployment commands
+                echo 'Deploying to ECS...'
+            }
+        }
     }
 
-    stage('Deploy ECS Service') {
-      steps {
-        dir('infrastructure') {
-          sh 'terraform apply -auto-approve'
+    post {
+        failure {
+            echo 'Build failed!'
         }
-      }
+        success {
+            echo 'Pipeline completed successfully.'
+        }
     }
-  }
 }
